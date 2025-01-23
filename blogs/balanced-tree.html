@@ -2,5 +2,243 @@
 <html>
 <body>
 <h1>平衡树学习笔记</h1>
+<p>
+    学校 2025 冬令营有这样一道题：<a href="https://www.luogu.com.cn/problem/P3165">[CQOI2014] 排序机械臂</a>。<br>
+    由于我不会平衡树，所以我打开了 <a href="https://oi-wiki.org">OI Wiki</a>。<br>
+    然后我打算写一个 <a href="https://oi-wiki.org/ds/treap/#%E6%97%A0%E6%97%8B-treap">无旋 Treap</a>。<br>
+    （为什么很多人叫它 FHQ Treap）<sup>[1]</sup>
+</p>
+<p>
+    Treap 是 Tree 和 Heap 的合成词，直译为“树堆”，顾名思义就是树和堆的结合，同时满足树的性质和堆的性质。<br>
+    它使用一个随机分配的优先级来维持树的平衡，具体操作就是维持随机分配的权值满足堆的性质。<br>
+    这样建树是唯一的，所以树是均匀随机的。<br>
+    无旋 Treap 使用 split（分裂）和 merge（合并）操作使树满足堆的性质。<br>
+</p>
+<h2>Split 操作</h2>
+<p>
+    Split 操作有按值分裂和按排名分裂两种类型。<br>
+    <b>按值分裂</b>接受 val 一个参数，返回两棵子树：一棵 ≤val 的，一棵 &gt;val 的，如图所示：<br>
+    <img src="https://cdn.luogu.com.cn/upload/image_hosting/4j4dpvmc.png"><br>
+    如何进行这个操作呢？<br>
+    引用一张来自 OI-Wiki 的图片：<br>
+    <img src="https://oi-wiki.org/ds/images/treap-none-rot-split-by-val.svg"><br>
+    首先判断 val 与根的大小关系。
+    <ul>
+        <li>当 val≤根 时：将根的右子树按 val 分裂，把 ≤val 的部分作为根的右子树，返回根和<b>根的原右子树分裂的 >val 的部分</b></li>
+        <li>当 val&gt;根 时：将根的左子树按 val 分裂，把 >val 的部分作为根的左子树，返回<b>根的原左子树分裂的 ≤val 的部分</b>和根</li>
+    </ul>
+    递归一下就行。<br>
+    C++ 代码：<br>
+    <pre><code>pair<int, int> split_by_value(int n, int val) {
+    if (!n) return {0, 0};
+    if (t[n].v <= val) {
+        pair<int, int> p = split_by_value(t[n].rs, val);
+        t[n].rs = p.first;
+        push_up(n);
+        return {n, p.second};
+    }
+    pair<int, int> p = split_by_value(t[n].ls, val);
+    t[n].ls = p.second;
+    push_up(n);
+    return {p.first, n};
+}</code></pre><br>
+    <b>按排名分裂</b>接受 rank 一个参数，返回三棵子树：一棵 排名&lt;rank 的，一棵 排名=rank 的（一个节点或空树），一棵 排名>rank 的。<br>
+    如果你打过 BST，你肯定会觉得这个操作很简单。
+    直接像按值分裂一样递归即可。
+    C++ 代码：<br>
+    <pre><code>
+tuple<int, int, int> split_by_rank(int n, int rk) {
+    if (!n) return {0, 0, 0};
+    if (t[t[n].ls].sz >= rk) {
+        tuple<int, int, int> p = split_by_rank(t[n].ls, rk);
+        t[n].ls = get<2>(p);
+        push_up(n);
+        return {get<0>(p), get<1>(p), n};
+    }
+    else if (t[t[n].ls].sz + t[n].cnt >= rk) {
+        int l = t[n].ls, r = t[n].rs;
+        t[n].ls = t[n].rs = 0;
+        push_up(n);
+        return {l, n, r};
+    }
+    else {
+        tuple<int, int, int> p = split_by_rank(t[n].rs, rk - t[t[n].ls].sz - t[n].cnt);
+        t[n].rs = get<0>(p);
+        push_up(n);
+        return {n, get<1>(p), get<2>(p)};
+    }
+}</code></pre>
+</p>
+<h2>Merge 操作</h2>
+<p>
+    <b>合并操作</b>接受两棵平衡树 u,v 满足 u 中任意元素均小于 v 中任意元素，将它们合并并返回它们合并后的根。<br>
+    首先判断哪个节点作为根。<br>
+    显然优先级最大的元素（一定是两个根之一）作为根。<br>
+    那么另一个树一定挂在之前那个根的某个子树上，直接递归合并那个子树和另一个树即可。<br>
+    C++ 代码：<br>
+    <pre><code>int merge(int u, int v) {
+    if (!u && !v) return 0;
+    if (!u || !v) return u | v;
+    if (t[u].p > t[v].p) {
+        if (v == rt) rt = u;
+        t[u].rs = merge(t[u].rs, v);
+        push_up(u);
+        return u;
+    }
+    if (u == rt) rt = v;
+    t[v].ls = merge(u, t[v].ls);
+    push_up(v);
+    return v;
+}</code></pre>
+</p>
+<p>
+    [CQOI2014] 排序机械臂 需要两个操作：
+    <ul>
+        <li>将区间 [l, r] 翻转</li>
+        <li>求区间 [l, n] 的最小值位置</li>
+    </ul>
+    第二个操作很好办，设 mi 为当前节点下的最小值，递归即可。（注：可以直接不停往左子树跑）
+    第一个操作需要一个 lazy-tag。设 inv 为当前节点有没有翻转，split 或 merge 时 push_down（不能记 v 值，否则很难下传）。
+    C++ 代码：<br>
+    <pre><code>#include <bits/stdc++.h>
+using namespace std;
+
+#define INF 2147483647
+#define MAXN 100000
+#define endl '\n'
+#define OPEN(x, y) freopen((x), "r", stdin); freopen((y), "w", stdout)
+
+mt19937 mt{1312};
+
+struct Node {
+    int ls, rs, sz, p;
+    pair<int, int> w, mi;
+    bool inv;
+} t[MAXN + 10];
+
+int tot, rt;
+
+int add(pair<int, int> w) {
+    t[++ tot].p = mt();
+    t[tot].w = t[tot].mi = w;
+    t[tot].sz = 1;
+    if (!rt) rt = tot;
+    return tot;
+}
+
+void push_down(int n) {
+    if (t[n].inv) {
+        swap(t[n].ls, t[n].rs);
+        t[t[n].ls].inv ^= 1;
+        t[t[n].rs].inv ^= 1;
+        t[n].inv = false;
+    }
+}
+
+void push_up(int n) {
+    t[n].sz = t[t[n].ls].sz + t[t[n].rs].sz + 1;
+    t[n].mi = min({t[t[n].ls].mi, t[t[n].rs].mi, t[n].w});
+}
+
+pair<int, int> split_by_order(int n, int val) {
+    if (!n) return {0, 0};
+    push_down(n);
+    if (t[t[n].ls].sz + 1 <= val) {
+        pair<int, int> p = split_by_order(t[n].rs, val - t[t[n].ls].sz - 1);
+        t[n].rs = p.first;
+        push_up(n);
+        return {n, p.second};
+    }
+    pair<int, int> p = split_by_order(t[n].ls, val);
+    t[n].ls = p.second;
+    push_up(n);
+    return {p.first, n};
+}
+
+int getmin(int n, int v) {
+    push_down(n);
+    if (t[n].w == t[n].mi) return v + t[t[n].ls].sz + 1;
+    if (t[t[n].ls].mi == t[n].mi) {
+        return getmin(t[n].ls, v);
+    }
+    return getmin(t[n].rs, v + t[t[n].ls].sz + 1);
+}
+
+void print(int n) {
+    if (!n) return;
+    push_down(n);
+    print(t[n].ls);
+    cout << t[n].w.first << ' ';
+    print(t[n].rs);
+}
+
+int merge(int u, int v) {
+    if (!u && !v) return 0;
+    if (!u || !v) return u | v;
+    push_down(u);
+    push_down(v);
+    if (t[u].p > t[v].p) {
+        if (v == rt) rt = u;
+        t[u].rs = merge(t[u].rs, v);
+        push_up(u);
+        return u;
+    }
+    if (u == rt) rt = v;
+    t[v].ls = merge(u, t[v].ls);
+    push_up(v);
+    return v;
+}
+
+void insert(pair<int, int> w) {
+    pair<int, int> p = split_by_order(rt, tot);
+    p.second = add(w);
+    merge(p.first, p.second);
+}
+
+int get_min(int x) {
+    pair<int, int> p = split_by_order(rt, x - 1);
+    int res = getmin(p.second, x - 1);
+    merge(p.first, p.second);
+    return res;
+}
+
+void flip(int l, int r) {
+    pair<int, int> p = split_by_order(rt, l - 1);
+    pair<int, int> q = split_by_order(p.second, r - l + 1);
+    t[q.first].inv ^= 1;
+    merge(p.first, merge(q.first, q.second));
+}
+
+int a[MAXN + 10];
+
+int main() {
+    t[0].mi = {INF, INF};
+    int n;
+    cin >> n;
+    for (int i = 1; i <= n; i ++) {
+        cin >> a[i];
+        insert({a[i], i});
+    }
+    for (int i = 1; i <= n; i ++) {
+        int k = get_min(i);
+        if (i > 1) cout << ' ';
+        cout << k;
+        flip(i, k);
+    }
+    cout << endl;
+    return 0;
+}</code></pre>
+</p>
+<p>
+    推荐题目：<br>
+    <a href="https://www.luogu.com.cn/problem/P3369">【模板】普通平衡树</a><br>
+    <a href="https://www.luogu.com.cn/problem/P6136">【模板】普通平衡树（数据加强版）</a><br>
+    <a href="https://www.luogu.com.cn/problem/P3369">【模板】文艺平衡树</a>
+    <a href="https://www.luogu.com.cn/problem/P1486">[NOI2004] 郁闷的出纳员</a>
+</p>
+<p>
+    [1] 讲解无旋 Treap 应当提到 FHQ-Treap（by 范浩强）。即<b>可持久化，支持区间操作的无旋 Treap</b>。更多内容请参照《范浩强谈数据结构》ppt。<br>
+    From <a href="https://oi-wiki.org/ds/treap/#%E6%97%A0%E6%97%8B-treap">Treap - OI Wiki</a>
+</p>
 </body>
 </html>
